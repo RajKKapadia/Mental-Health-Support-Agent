@@ -5,7 +5,6 @@ from pydantic import BaseModel
 
 class HealthResponse(BaseModel):
     message: str
-    status: int
 
 
 class ChatHistory(BaseModel):
@@ -20,5 +19,11 @@ class AgentChatRequest(BaseModel):
 
 
 class AgentChatResponse(BaseModel):
-    type: str
-    content: str
+    response: str
+
+
+class UserInfo(BaseModel):
+    name: str = "User"
+    user_id: str
+    age: int
+    gender: str
