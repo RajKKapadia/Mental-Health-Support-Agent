@@ -121,7 +121,6 @@ async def post_chat(
                         )
                     # When final answer
                     elif event.item.type == "message_output_item":
-                        logger.info(ItemHelpers.text_message_output(event.item))
                         yield (
                             json.dumps(
                                 {

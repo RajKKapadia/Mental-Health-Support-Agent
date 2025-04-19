@@ -442,11 +442,12 @@ export default function Home() {
           placeholder="Type your message here..."
           className="flex-1"
           disabled={isLoading}
+          autoFocus={!isLoading}
         />
         <Button
           onClick={handleSendMessage}
           size="icon"
-          disabled={isLoading || !newMessage.trim()}
+          disabled={isLoading}
         >
           <Send className="h-4 w-4" />
         </Button>
