@@ -9,11 +9,12 @@ from agents import (
     OpenAIResponsesModel,
     Runner,
     AsyncOpenAI,
+    WebSearchTool,
 )
 from openai.types.responses import ResponseTextDeltaEvent
-from openai import OpenAI
 
-from src.models.schemas import AgentChatRequest, ChatHistory, UserInfo
+from src.schemas.agent import AgentChatRequest, ChatHistory
+from src.schemas.user import UserInfo
 from src import config
 from src.tools.current_date_tool import fetch_current_date_time
 from src.tools.save_callback_request import SaveCallbackRequestTool
@@ -27,7 +28,7 @@ router = APIRouter(prefix=f"/api/{config.API_VERSION}/agent", tags=["AGENT"])
 logger = logging.getLogger(__name__)
 
 
-client = OpenAI(api_key=config.OPENAI_API_KEY)
+client = AsyncOpenAI(api_key=config.OPENAI_API_KEY)
 
 
 def format_chat_history(
@@ -42,11 +43,19 @@ def format_chat_history(
 
 
 """Agent"""
-table_booking_agent = Agent[UserInfo](
+mental_health_support_agent = Agent[UserInfo](
     name="Mental Health Support Agent",
     tools=[
         fetch_current_date_time,
         SaveCallbackRequestTool,
+        WebSearchTool(
+            user_location={
+                "country": "IN",
+                "timezone": "Asia/Kolkata",
+                "type": "approximate",
+            },
+            search_context_size="high",
+        ),
     ],
     model=OpenAIResponsesModel(
         model=config.OPENAI_AGENT_MODEL,
@@ -67,11 +76,20 @@ async def post_chat(
             starting_agent=guardrail_agent, input=formatted_chat_history
         )
 
+        input_tokens = 0
+        output_tokens = 0
+        total_tokens = 0
+
+        for item in input_checks.raw_responses:
+            input_tokens += item.usage.input_tokens
+            output_tokens += item.usage.output_tokens
+            total_tokens += item.usage.total_tokens
+
         final_output = input_checks.final_output_as(GaurdrailCheckOutput)
 
         if final_output.is_mental_health:
             result = Runner.run_streamed(
-                starting_agent=table_booking_agent, input=formatted_chat_history
+                starting_agent=mental_health_support_agent, input=formatted_chat_history
             )
 
             async for event in result.stream_events():
@@ -94,24 +112,25 @@ async def post_chat(
                 # When items are generated
                 elif event.type == "run_item_stream_event":
                     if event.item.type == "tool_call_item":
-                        yield (
-                            json.dumps(
-                                {
-                                    "type": "tool_name",
-                                    "content": event.item.raw_item.name,
-                                }
+                        if event.item.raw_item.type == "function_call":
+                            yield (
+                                json.dumps(
+                                    {
+                                        "type": "tool_name",
+                                        "content": event.item.raw_item.name,
+                                    }
+                                )
+                                + "\n"
                             )
-                            + "\n"
-                        )
-                        yield (
-                            json.dumps(
-                                {
-                                    "type": "tool_args",
-                                    "content": event.item.raw_item.arguments,
-                                }
+                            yield (
+                                json.dumps(
+                                    {
+                                        "type": "tool_args",
+                                        "content": event.item.raw_item.arguments,
+                                    }
+                                )
+                                + "\n"
                             )
-                            + "\n"
-                        )
                     elif event.item.type == "tool_call_output_item":
                         yield (
                             json.dumps(
@@ -136,9 +155,9 @@ async def post_chat(
                         # Ignore other event types
                         pass
         else:
-            completion = client.chat.completions.create(
+            completion = await client.responses.create(
                 model=config.OPENAI_AGENT_MODEL,
-                messages=[
+                input=[
                     {
                         "role": "user",
                         "content": f"""You are a helpful assistant, polietly say that you can't answer user's query: {agent_chat_request.query} 
@@ -147,19 +166,31 @@ async def post_chat(
                 ],
                 stream=True,
             )
-            for chunk in completion:
-                if (
-                    chunk.choices[0].delta.content is not None
-                    and chunk.choices[0].delta.content != ""
-                ):
+            async for chunk in completion:
+                if chunk.type == "response.output_text.delta":
                     yield (
                         json.dumps(
                             {
                                 "type": "answer",
-                                "content": chunk.choices[0].delta.content,
+                                "content": chunk.delta,
                             }
                         )
                         + "\n"
                     )
+                elif chunk.type == "response.completed":
+                    input_tokens += chunk.response.usage.input_tokens
+                    output_tokens += chunk.response.usage.output_tokens
+                    total_tokens += chunk.response.usage.total_tokens
+
+        yield (
+            json.dumps(
+                {
+                    "input_tokens": input_tokens,
+                    "output_tokens": output_tokens,
+                    "total_tokens": total_tokens,
+                }
+            )
+            + "\n"
+        )
 
     return StreamingResponse(generate(), media_type="application/json")

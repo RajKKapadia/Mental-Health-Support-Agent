@@ -4,7 +4,10 @@ import json
 from agents import FunctionTool, RunContextWrapper
 from pydantic import BaseModel, Field
 
-from src.models.schemas import UserInfo
+from src.schemas.user import UserInfo
+from src import logging
+
+logger = logging.getLogger(__name__)
 
 
 class SaveCallbackToolInput(BaseModel):
@@ -18,10 +21,13 @@ async def save_callback_request(
 ) -> Dict[str, str]:
     """TODO
     [ ] Add actual database call here"""
+    logger.info(ctx)
+    logger.info(args)
+    logger.info(SaveCallbackToolInput.model_validate(args))
     return json.dumps(
         {
             "status": "Success",
-            "message": "User callback request registered successfully.",
+            "message": f"A callback request registered successfully for {ctx.context.name}.",
         }
     )
 
@@ -33,7 +39,7 @@ async def run_save_callback_request(ctx: RunContextWrapper[UserInfo], args: str)
 
 SaveCallbackRequestTool = FunctionTool(
     name="save_callback_request",
-    description="Fetch the table availability at the restaurant via API call.",
+    description="Save the callback request in the database.",
     params_json_schema=SaveCallbackToolInput.model_json_schema(),
     on_invoke_tool=run_save_callback_request,
     strict_json_schema=False,

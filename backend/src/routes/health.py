@@ -1,6 +1,6 @@
 from fastapi import APIRouter, status
 
-from src.models.schemas import HealthResponse
+from src.schemas.health import HealthResponse
 from src import config
 
 router = APIRouter(prefix=f"/api/{config.API_VERSION}", tags=["HOME"])
