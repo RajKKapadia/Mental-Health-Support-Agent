@@ -4,22 +4,18 @@ from typing import List
 from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 from agents import (
-    Agent,
     ItemHelpers,
-    OpenAIResponsesModel,
     Runner,
     AsyncOpenAI,
-    WebSearchTool,
 )
 from openai.types.responses import ResponseTextDeltaEvent
 
 from src.schemas.agent import AgentChatRequest, ChatHistory
-from src.schemas.user import UserInfo
 from src import config
-from src.tools.current_date_tool import fetch_current_date_time
-from src.tools.save_callback_request import SaveCallbackRequestTool
-from src.utils.guard_rail import GaurdrailCheckOutput, guardrail_agent
+from src.agents.menatl_health_support import mental_health_support_agent
+from src.agents.guard_rail import GuardrailCheckOutput, guardrail_agent
 from src.utils.utils import verify_api_key
+from src.prompts.prompts import GUARDRAIL_FALSE_PROMPT
 from src import logging
 
 
@@ -42,29 +38,6 @@ def format_chat_history(
     return formatted_messages
 
 
-"""Agent"""
-mental_health_support_agent = Agent[UserInfo](
-    name="Mental Health Support Agent",
-    tools=[
-        fetch_current_date_time,
-        SaveCallbackRequestTool,
-        WebSearchTool(
-            user_location={
-                "country": "IN",
-                "timezone": "Asia/Kolkata",
-                "type": "approximate",
-            },
-            search_context_size="high",
-        ),
-    ],
-    model=OpenAIResponsesModel(
-        model=config.OPENAI_AGENT_MODEL,
-        openai_client=AsyncOpenAI(api_key=config.OPENAI_API_KEY),
-    ),
-    instructions=config.SYSTEM_PROMPT,
-)
-
-
 @router.post("/chat", response_model=None)
 async def post_chat(
     agent_chat_request: AgentChatRequest, is_varified: bool = Depends(verify_api_key)
@@ -85,7 +58,7 @@ async def post_chat(
             output_tokens += item.usage.output_tokens
             total_tokens += item.usage.total_tokens
 
-        final_output = input_checks.final_output_as(GaurdrailCheckOutput)
+        final_output = input_checks.final_output_as(GuardrailCheckOutput)
 
         if final_output.is_mental_health:
             result = Runner.run_streamed(
@@ -160,8 +133,12 @@ async def post_chat(
                 input=[
                     {
                         "role": "user",
-                        "content": f"""You are a helpful assistant, polietly say that you can't answer user's query: {agent_chat_request.query} 
-                        because of {final_output.reasoning}. Ask user to stick to mental health being questions.""",
+                        "content": GUARDRAIL_FALSE_PROMPT.format(
+                            **{
+                                "reasoning": final_output.reasoning,
+                                "query": agent_chat_request.query,
+                            }
+                        ),
                     },
                 ],
                 stream=True,

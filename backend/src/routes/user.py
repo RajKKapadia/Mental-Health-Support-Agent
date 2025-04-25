@@ -1,28 +1,11 @@
-import json
-from typing import List
-
-from fastapi import APIRouter, Depends, Request, status
-from fastapi.responses import StreamingResponse
-from agents import (
-    Agent,
-    ItemHelpers,
-    OpenAIResponsesModel,
-    Runner,
-    AsyncOpenAI,
-    WebSearchTool,
-)
-from openai.types.responses import ResponseTextDeltaEvent
+from fastapi import APIRouter, Depends, status
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.database.database import get_db
-from src.schemas.agent import AgentChatRequest, ChatHistory
 from src.models.user import User
 from src import config
-from src.tools.current_date_tool import fetch_current_date_time
-from src.tools.save_callback_request import SaveCallbackRequestTool
-from src.utils.guard_rail import GaurdrailCheckOutput, guardrail_agent
 from src.utils.utils import verify_api_key
 from src import logging
 

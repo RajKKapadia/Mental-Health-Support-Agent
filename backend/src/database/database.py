@@ -1,5 +1,7 @@
 import logging
+
 import asyncpg
+from sqlalchemy import create_engine
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
 
@@ -43,28 +45,39 @@ async def get_db():
         raise
 
 
+SQLALCHEMY_DATABASE_URL_SYNC = (
+    f"postgresql+psycopg2://{DB_USERNAME}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+)
+
+engine_sync = create_engine(
+    url=SQLALCHEMY_DATABASE_URL_SYNC, echo=True, pool_pre_ping=True
+)
+
+SessionLocal = sessionmaker(
+    engine_sync,
+)
+
+
 async def init_db():
     try:
         logger.info("Checking if database exists")
         dsn = f"postgresql://{config.DB_USERNAME}:{config.DB_PASSWORD}@{config.DB_HOST}:{config.DB_PORT}/postgres"
 
         # Improved connection with timeout
-        sys_conn = await asyncpg.connect(dsn, timeout=5.0)
+        sys_conn: asyncpg.connection.Connection = await asyncpg.connect(
+            dsn, timeout=5.0
+        )
 
         try:
-            # Check database existence
             db_exists = await sys_conn.fetchval(
                 "SELECT EXISTS(SELECT 1 FROM pg_database WHERE datname = $1)",
                 config.DB_NAME,
             )
-
-            # Improved database creation logic
             if not db_exists:
                 try:
                     await sys_conn.execute(f'CREATE DATABASE "{config.DB_NAME}"')
                     logger.info(f"Database '{config.DB_NAME}' created successfully")
-                except asyncpg.DatabaseError as e:
-                    # Handle potential race conditions
+                except Exception as e:
                     if "already exists" not in str(e):
                         logger.error(f"Error creating database: {e}")
                         raise
@@ -80,8 +93,6 @@ async def init_db():
     except Exception as e:
         logger.error(f"Unexpected error during database initialization: {e}")
         raise
-
-    # Table creation remains the same
     try:
         async with engine.begin() as conn:
             logger.info("Creating database tables if they don't exist")
