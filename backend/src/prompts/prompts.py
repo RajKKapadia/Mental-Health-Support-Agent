@@ -21,7 +21,7 @@ GUARDRAIL_PROMPT = """Check if the user is asking about one the following things
 (2) mental health and well being advice or conversations
 (3) books about mental health, well being and meditation
 (4) excercises about mental health, well being and meditation
-(5) User can request a callback in case of needs"""
+(5) User can register a callback in case of needs"""
 
 GUARDRAIL_FALSE_PROMPT = """You are a helpful assistant, polietly say that you can't answer user's query: {query} 
 because of {reasoning}. Ask user to stick to mental health being questions."""
