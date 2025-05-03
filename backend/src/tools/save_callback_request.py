@@ -25,7 +25,7 @@ async def save_callback_request(
     return json.dumps(
         {
             "status": "Success",
-            "message": f"A callback request registered successfully for {ctx.context.name}.",
+            "message": "A callback request registered successfully.",
         }
     )
 
